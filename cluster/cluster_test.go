@@ -12,10 +12,9 @@ import (
 
 // inmemoryProvider use for test
 type inmemoryProvider struct {
-	cluster  *Cluster
-	members  map[string]*Member
-	self     *Member
-	revision uint64
+	cluster *Cluster
+	members map[string]*Member
+	self    *Member
 }
 
 func newInmemoryProvider() *inmemoryProvider {
@@ -39,15 +38,14 @@ func (p *inmemoryProvider) init(c *Cluster) error {
 }
 
 func (p *inmemoryProvider) publishClusterTopologyEvent() {
-	members := []*Member{}
+	var members []*Member
 	for _, m := range p.members {
 		members = append(members, m)
 	}
 
-	res := TopologyEvent(members)
+	res := members
 
-	p.revision++
-	p.cluster.MemberList.UpdateClusterTopology(res, p.revision)
+	p.cluster.MemberList.UpdateClusterTopology(res)
 	// p.cluster.ActorSystem.EventStream.Publish(res)
 }
 
@@ -66,22 +64,16 @@ func (p *inmemoryProvider) Shutdown(graceful bool) error {
 	delete(p.members, p.self.Id)
 	return nil
 }
-func (p *inmemoryProvider) UpdateClusterState(state ClusterState) error {
-	return fmt.Errorf("Not implemented yet")
-}
 
 func TestCluster_Call(t *testing.T) {
 	assert := assert.New(t)
 
 	system := actor.NewActorSystem()
 
-	c := New(system, Configure("mycluster", nil, remote.Configure("nonhost", 0)))
-	c.partitionValue = setupPartition(c, []string{"kind"})
-	c.pidCache = setupPidCache(c.ActorSystem)
-	c.MemberList = setupMemberList(c)
-	c.Config.TimeoutTime = 1 * time.Second
-	c.partitionManager = newPartitionManager(c)
-	c.partitionManager.Start()
+	c := New(system, Configure("mycluster", nil, nil, remote.Configure("nonhost", 0)))
+
+	c.MemberList = NewMemberList(c)
+	c.Config.RequestTimeoutTime = 1 * time.Second
 
 	members := []*Member{
 		{
@@ -91,11 +83,11 @@ func TestCluster_Call(t *testing.T) {
 			Kinds: []string{"kind"},
 		},
 	}
-	c.MemberList.UpdateClusterTopology(members, 1)
-	// address := memberList.getPartitionMember("name", "kind")
+	c.MemberList.UpdateClusterTopology(members)
+	// address := memberList.GetPartitionMember("name", "kind")
 	t.Run("invalid kind", func(t *testing.T) {
 		msg := struct{}{}
-		resp, err := c.Call("name", "nonkind", &msg)
+		resp, err := c.Request("name", "nonkind", &msg)
 		assert.Equal(remote.ErrUnAvailable, err)
 		assert.Nil(resp)
 	})
@@ -103,9 +95,9 @@ func TestCluster_Call(t *testing.T) {
 	// FIXME: testcase
 	// t.Run("timeout", func(t *testing.T) {
 	// 	msg := struct{}{}
-	// 	callopts := NewGrainCallOptions(c).WithRetry(2).WithTimeout(1 * time.Second)
+	// 	callopts := NewGrainCallOptions(c).WithRetry(2).WithRequestTimeout(1 * time.Second)
 	// 	resp, err := c.Call("name", "kind", &msg, callopts)
-	// 	assert.Equalf(remote.ErrUnknownError, err, "%v", err)
+	// 	assert.Equalf(Remote.ErrUnknownError, err, "%v", err)
 	// 	assert.Nil(resp)
 	// })
 
@@ -119,10 +111,10 @@ func TestCluster_Call(t *testing.T) {
 		})
 	pid := system.Root.Spawn(testProps)
 	assert.NotNil(pid)
-	c.pidCache.addCache("kind/name", pid)
+	c.PidCache.Set("name", "kind", pid)
 	t.Run("normal", func(t *testing.T) {
 		msg := struct{ Code int }{9527}
-		resp, err := c.Call("name", "kind", &msg)
+		resp, err := c.Request("name", "kind", &msg)
 		assert.NoError(err)
 		assert.Equal(&struct{ Code int }{9528}, resp)
 	})
@@ -138,21 +130,19 @@ func TestCluster_Get(t *testing.T) {
 			_ = msg
 		}
 	}))
-	c := New(system, Configure("mycluster", cp, remote.Configure("127.0.0.1", 0), kind))
-	c.Start()
+	c := New(system, Configure("mycluster", cp, nil, remote.Configure("127.0.0.1", 0), kind))
+	c.StartMember()
 	cp.publishClusterTopologyEvent()
 	t.Run("invalid kind", func(t *testing.T) {
 		assert := assert.New(t)
 		assert.Equal(1, c.MemberList.Length())
-		pid, code := c.Get("name", "nonkind")
-		assert.Equal(remote.ResponseStatusCodeUNAVAILABLE, code)
+		pid := c.Get("name", "nonkind")
 		assert.Nil(pid)
 	})
 
 	t.Run("ok", func(t *testing.T) {
 		assert := assert.New(t)
-		pid, code := c.Get("name", "kind")
-		assert.Equal(remote.ResponseStatusCodeOK, code)
+		pid := c.Get("name", "kind")
 		assert.NotNil(pid)
 	})
 }

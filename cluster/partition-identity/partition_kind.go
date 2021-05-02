@@ -1,6 +1,7 @@
-package cluster
+package partition_identity
 
 import (
+	clustering "github.com/AsynkronIT/protoactor-go/cluster"
 	"time"
 
 	"github.com/AsynkronIT/protoactor-go/actor"
@@ -10,7 +11,7 @@ import (
 )
 
 type PartitionKind struct {
-	cluster    *Cluster
+	cluster    *clustering.Cluster
 	Kind       string
 	identity   *partitionIdentityActor
 	activator  *partitionPlacementActor
@@ -20,7 +21,7 @@ type PartitionKind struct {
 	}
 }
 
-func newPartitionKind(c *Cluster, kind string) *PartitionKind {
+func newPartitionKind(c *clustering.Cluster, kind string) *PartitionKind {
 	return &PartitionKind{
 		cluster: c,
 		Kind:    kind,
@@ -34,7 +35,7 @@ func newPartitionKind(c *Cluster, kind string) *PartitionKind {
 	}
 }
 
-// Start ...
+// StartMember ...
 func (pm *PartitionKind) start(_chash chash.ConsistentHash) error {
 	pm.identity = newPartitionIdentityActor(pm.cluster, pm, _chash)
 	pm.activator = newPartitionPlacementActor(pm.cluster, pm, _chash)

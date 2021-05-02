@@ -18,7 +18,7 @@ func TestStart(t *testing.T) {
 
 func TestConfig_WithAdvertisedHost(t *testing.T) {
 	system := actor.NewActorSystem()
-	config := Configure("localhost", 0).WithAdvertisedHost("Banana")
+	config := Configure("localhost", 0, WithAdvertisedHost("Banana"))
 	remote := NewRemote(system, config)
 	remote.Start()
 	assert.Equal(t, "Banana", system.Address())
@@ -38,6 +38,40 @@ func TestRemote_Register(t *testing.T) {
 	assert.Equal(t, "someOther", kinds[1])
 }
 
+func TestRemote_RegisterViaOptions(t *testing.T) {
+	system := actor.NewActorSystem()
+	config := Configure("localhost", 0,
+		WithKinds(
+			NewKind("someKind", actor.PropsFromProducer(nil)),
+			NewKind("someOther", actor.PropsFromProducer(nil))))
+
+	remote := NewRemote(system, config)
+	kinds := remote.GetKnownKinds()
+	assert.Equal(t, 2, len(kinds))
+	sort.Strings(kinds)
+	assert.Equal(t, "someKind", kinds[0])
+	assert.Equal(t, "someOther", kinds[1])
+}
+
+func TestRemote_RegisterViaStruct(t *testing.T) {
+	system := actor.NewActorSystem()
+	config := Config{
+		Host: "localhost",
+		Port: 0,
+		Kinds: map[string]*actor.Props{
+			"someKind":  actor.PropsFromProducer(nil),
+			"someOther": actor.PropsFromProducer(nil),
+		},
+	}
+
+	remote := NewRemote(system, config)
+	kinds := remote.GetKnownKinds()
+	assert.Equal(t, 2, len(kinds))
+	sort.Strings(kinds)
+	assert.Equal(t, "someKind", kinds[0])
+	assert.Equal(t, "someOther", kinds[1])
+}
+
 //
 //func (suite *ServerTestSuite) TestStart_AdvertisedAddress() {
 //	// Find available Port
@@ -49,7 +83,7 @@ func TestRemote_Register(t *testing.T) {
 //	_ = lis.Close()
 //
 //	AdvertisedHost := "192.0.2.1:1234"
-//	remote.Start()
+//	remote.StartMember()
 //
 //	suite.NotEmpty(system.ProcessRegistry.RemoteHandlers, "AddressResolver should be registered on server start")
 //	suite.Equal(AdvertisedHost, system.ProcessRegistry.Address, "WithAdvertisedHost should have higher priority")
